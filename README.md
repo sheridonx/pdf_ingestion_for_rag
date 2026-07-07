@@ -1,0 +1,135 @@
+# pdf-ingestion-for-rag
+
+Production-grade PDF → chunk ingestion for RAG. Layout-aware parsing (PyMuPDF)
++ **hierarchical, structure-aware chunking** with rich, typed metadata.
+
+## Why hierarchical (not semantic) chunking?
+
+PDFs already encode structure (headings, sections, tables). Hierarchical
+chunking exploits it: it is **deterministic and reproducible**, needs **no
+embedding calls at ingest time**, and **won't split mid-table**. Semantic
+(embedding-boundary) chunking is non-deterministic, costs an embedding call per
+sentence, and gives marginal retrieval gains for most corpora. This library
+does structure-aware splitting by default; a semantic refinement pass can be
+layered on later if a corpus genuinely needs it.
+
+Pipeline:
+
+```
+PDF ─▶ parse (text│heading│table│image, reading order)
+    ─▶ heading-hierarchy sectioning
+    ─▶ token-aware split within sections (+overlap)
+    ─▶ finalize: ids, prev/next links, provenance, metadata
+```
+
+## Install
+
+```bash
+cd pdf_ingestion_for_rag
+python -m venv .venv && .venv\Scripts\activate     # Windows
+# source .venv/bin/activate                        # macOS/Linux
+pip install -e ".[dev,lang]"
+```
+
+Requires Python ≥ 3.10. Core deps: `pymupdf`, `pydantic`, `tiktoken`.
+
+> Note: this machine has no Python interpreter installed, so the test suite has
+> not been run here. After installing, run `pytest` to validate.
+
+## Usage — library
+
+```python
+from pdf_ingestion_for_rag import ingest_pdf, IngestionConfig
+
+config = IngestionConfig(max_tokens=512, overlap_tokens=64)
+result = ingest_pdf("report.pdf", config)
+
+for chunk in result.chunks:
+    m = chunk.metadata
+    print(m.chunk_index, m.section_path, m.page_start, m.page_end)
+    embed(chunk.to_embedding_input())   # your embedding call
+```
+
+In-memory (uploads, object storage):
+
+```python
+from pdf_ingestion_for_rag import ingest_pdf_bytes
+result = ingest_pdf_bytes(pdf_bytes, source_name="s3://bucket/report.pdf")
+```
+
+## Usage — CLI
+
+```bash
+pdf-ingest-rag report.pdf --out chunks.jsonl
+pdf-ingest-rag ./docs --glob "*.pdf" --out ./out --max-tokens 384 --overlap-tokens 48
+```
+
+Each JSONL line is `{"text": ..., <all metadata fields>}`.
+
+## Embedding with Azure OpenAI (optional)
+
+`text-embedding-3-*` uses the `cl100k_base` encoding — already the ingestion
+default, so chunk token counts are exact for it. The optional embedder batches
+within the 8191-token/request limit, retries on throttling, and supports
+dimension shortening.
+
+```bash
+pip install -e ".[azure]"
+# env: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, OPENAI_API_VERSION
+```
+
+```python
+from pdf_ingestion_for_rag import ingest_pdf
+from pdf_ingestion_for_rag.embeddings import AzureOpenAIEmbedder, AzureEmbedderConfig
+
+result = ingest_pdf("report.pdf")
+embedder = AzureOpenAIEmbedder(
+    AzureEmbedderConfig(deployment="text-embedding-3-large", dimensions=1024)
+)
+embedded = embedder.embed_chunks(result.chunks)   # -> [EmbeddedChunk(chunk, embedding), ...]
+for e in embedded:
+    upsert(id=e.chunk.metadata.chunk_id, vector=e.embedding, payload=e.chunk.metadata.model_dump())
+```
+
+`deployment` is your **Azure deployment name**, not the base model name. Omit
+`api_key` to use Entra ID / managed-identity auth (`AZURE_OPENAI_AD_TOKEN`).
+
+## Chunk metadata
+
+| Field | Meaning |
+|---|---|
+| `chunk_id` | Deterministic UUID5 (stable across runs) |
+| `doc_id` | UUID5 of the file hash |
+| `source_path`, `source_filename`, `file_hash` | Provenance (sha256) |
+| `chunk_index`, `total_chunks` | Position within the document |
+| `previous_chunk_id`, `next_chunk_id` | Sibling links for windowed retrieval |
+| `page_start`, `page_end` | Page span (1-indexed) for citations |
+| `section_title`, `section_path`, `heading_level` | Heading hierarchy breadcrumb |
+| `contains_tables`, `contains_images` | Content signals for routing/filtering |
+| `token_count`, `char_count` | Sizing |
+| `language` | Optional per-chunk language (needs `[lang]` extra) |
+| `created_at`, `extra` | Audit timestamp + extension bag |
+
+## Configuration
+
+See `IngestionConfig` in `src/pdf_ingestion_for_rag/config.py`. Key knobs:
+`max_tokens`, `min_tokens`, `overlap_tokens`, `split_on_section`,
+`prepend_section_context`, `keep_tables_whole`, heading-detection thresholds,
+and robustness toggles (`skip_pages_on_error`, `pdf_password`).
+
+## Scope & extension points
+
+* **Scanned / image-only PDFs** produce no text (a warning is emitted). Add an
+  OCR step (e.g. `ocrmypdf`, Tesseract, or a vision model) upstream, then feed
+  the OCR'd PDF/bytes to `ingest_pdf`.
+* **Complex multi-column layouts** rely on PyMuPDF's reading-order sort; for
+  heavy layout analysis, swap the parser for a layout model without touching the
+  chunker or pipeline.
+* **Semantic refinement**: run an embedding-similarity merge/split pass over the
+  hierarchical chunks if a corpus needs it — the `Chunk` model is the seam.
+
+## Tests
+
+```bash
+pytest        # chunker/tokenizer tests run without any PDF
+```

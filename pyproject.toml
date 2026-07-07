@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-ingestion-for-rag"
+version = "0.1.0"
+description = "Production-grade PDF ingestion for RAG: layout-aware parsing + hierarchical chunking with rich metadata."
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.24.0",   # PDF parsing, layout, tables, images
+    "pydantic>=2.6",     # typed, validated chunk models
+    "tiktoken>=0.6",     # token counting / token-aware splitting
+]
+
+[project.optional-dependencies]
+lang = ["langdetect>=1.0.9"]        # optional per-chunk language detection
+azure = ["openai>=1.13", "tenacity>=8.2"]  # Azure OpenAI embedding backend
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+pdf-ingest-rag = "pdf_ingestion_for_rag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
