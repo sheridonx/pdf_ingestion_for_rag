@@ -65,9 +65,11 @@ open_document ─▶ DocumentParser.parse ─▶ HierarchicalChunker.chunk ─�
 
 - **`pipeline.py`** — owns everything needing *document-level* context:
   sha256 hashing, deterministic UUID5 ids (stable across runs via a fixed
-  `_NAMESPACE`), prev/next chunk linking, section-context prefixing, optional
-  language detection, and provenance metadata. `ingest_pdf` / `ingest_pdf_bytes`
-  are the public entry points; both funnel through `_ingest`.
+  `_NAMESPACE`), prev/next chunk linking, optional language detection, and
+  provenance metadata. Stored `Chunk.text` is kept **raw**; the section
+  breadcrumb is composed at embed time in `Chunk.to_embedding_input()`, not
+  baked into the text. `ingest_pdf` / `ingest_pdf_bytes` are the public entry
+  points; both funnel through `_ingest`.
 
 - **`tokenizer.py`** — wraps tiktoken (`cl100k_base` default) with a
   **char-based fallback** if tiktoken/encoding data is unavailable, so the

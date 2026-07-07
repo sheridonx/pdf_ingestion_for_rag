@@ -42,11 +42,6 @@ class IngestionConfig(BaseModel):
         default=True,
         description="Start a new chunk when a heading introduces a new section.",
     )
-    prepend_section_context: bool = Field(
-        default=True,
-        description="Prepend the section breadcrumb (e.g. 'A > B > C') to chunk text "
-        "so isolated chunks stay self-describing for the embedder.",
-    )
     keep_tables_whole: bool = Field(
         default=True,
         description="Never split a table across chunks, even if it exceeds max_tokens.",

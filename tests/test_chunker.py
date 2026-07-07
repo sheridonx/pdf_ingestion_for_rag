@@ -59,7 +59,7 @@ def test_oversized_block_is_windowed():
 
 
 def test_table_flag_and_whole_table_kept():
-    cfg = IngestionConfig(max_tokens=32, min_tokens=0, keep_tables_whole=True)
+    cfg = IngestionConfig(max_tokens=64, min_tokens=0, overlap_tokens=0, keep_tables_whole=True)
     chunker = HierarchicalChunker(cfg, Tokenizer())
     table = Block(
         type=BlockType.TABLE,

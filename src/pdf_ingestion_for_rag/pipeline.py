@@ -79,10 +79,9 @@ def _finalize(
 
     chunks: list[Chunk] = []
     for i, pc in enumerate(pending):
+        # Stored text stays raw/pristine; section context is composed at embed
+        # time in Chunk.to_embedding_input() from the structured section_path.
         text = pc.text
-        if config.prepend_section_context and pc.section_path:
-            breadcrumb = " > ".join(pc.section_path)
-            text = f"[{breadcrumb}]\n\n{text}"
 
         metadata = ChunkMetadata(
             chunk_id=chunk_ids[i],

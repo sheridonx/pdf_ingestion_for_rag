@@ -89,6 +89,16 @@ class Chunk(BaseModel):
     text: str
     metadata: ChunkMetadata
 
-    def to_embedding_input(self) -> str:
-        """Text as it should be handed to the embedding model."""
+    def to_embedding_input(self, prepend_section_context: bool = True) -> str:
+        """Text as it should be handed to the embedding model.
+
+        `Chunk.text` is always the raw, unmodified passage. Section context is a
+        retrieval-time concern, so it is composed here (from the structured
+        `metadata.section_path`) instead of being baked into the stored text.
+        Prepending the breadcrumb keeps an isolated chunk self-describing for the
+        embedder; pass ``prepend_section_context=False`` to embed the bare text.
+        """
+        if prepend_section_context and self.metadata.section_path:
+            breadcrumb = " > ".join(self.metadata.section_path)
+            return f"[{breadcrumb}]\n\n{self.text}"
         return self.text

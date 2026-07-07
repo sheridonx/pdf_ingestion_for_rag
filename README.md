@@ -50,6 +50,12 @@ for chunk in result.chunks:
     embed(chunk.to_embedding_input())   # your embedding call
 ```
 
+`chunk.text` is always the **raw** passage. `to_embedding_input()` prepends the
+section breadcrumb (e.g. `[A > B > C]`) so an isolated chunk stays
+self-describing for the embedder — context lives at embed time, not in the
+stored text. Pass `to_embedding_input(prepend_section_context=False)` to embed
+the bare text.
+
 In-memory (uploads, object storage):
 
 ```python
@@ -114,8 +120,9 @@ for e in embedded:
 
 See `IngestionConfig` in `src/pdf_ingestion_for_rag/config.py`. Key knobs:
 `max_tokens`, `min_tokens`, `overlap_tokens`, `split_on_section`,
-`prepend_section_context`, `keep_tables_whole`, heading-detection thresholds,
-and robustness toggles (`skip_pages_on_error`, `pdf_password`).
+`keep_tables_whole`, heading-detection thresholds, and robustness toggles
+(`skip_pages_on_error`, `pdf_password`). Section context is applied at embed
+time via `Chunk.to_embedding_input()`, not through config.
 
 ## Scope & extension points
 
