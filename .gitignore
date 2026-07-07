@@ -1,0 +1,47 @@
+# Byte-compiled / optimized / C extensions
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+# uv.lock is committed on purpose for reproducible installs.
+
+# Testing / coverage / linting caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/out/
+
+# Environments / secrets
+.env
+.env.*
+
+# Editor / OS cruft
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

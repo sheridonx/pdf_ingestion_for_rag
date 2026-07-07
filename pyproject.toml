@@ -17,6 +17,13 @@ dependencies = [
 lang = ["langdetect>=1.0.9"]        # optional per-chunk language detection
 azure = ["openai>=1.13", "tenacity>=8.2"]  # Azure OpenAI embedding backend
 dev = ["pytest>=8.0", "ruff>=0.4"]
+notebook = [                        # run notebooks/pipeline_demo.ipynb
+    "jupyter>=1.0",
+    "nbconvert>=7.0",
+    "ipykernel>=6.0",
+    "matplotlib>=3.8",
+    "pandas>=2.0",
+]
 
 [project.scripts]
 pdf-ingest-rag = "pdf_ingestion_for_rag.cli:main"
@@ -27,3 +34,8 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.uv.workspace]
+members = [
+    "pdf_ingestion_rag",
+]
