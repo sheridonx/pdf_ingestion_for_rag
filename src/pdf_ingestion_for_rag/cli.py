@@ -19,15 +19,19 @@ from .pipeline import IngestionResult, ingest_pdf
 
 
 def _build_config(args: argparse.Namespace) -> IngestionConfig:
-    return IngestionConfig(
-        max_tokens=args.max_tokens,
-        overlap_tokens=args.overlap_tokens,
-        min_tokens=args.min_tokens,
-        detect_language=args.detect_language,
-        extract_tables=not args.no_tables,
-        extract_images=not args.no_images,
-        pdf_password=args.password,
-    )
+    # Only override IngestionConfig defaults for flags the user actually passed,
+    # so the library and CLI never disagree on defaults.
+    overrides: dict = {
+        "detect_language": args.detect_language,
+        "extract_tables": not args.no_tables,
+        "extract_images": not args.no_images,
+        "pdf_password": args.password,
+    }
+    for name in ("max_tokens", "min_tokens", "overlap_tokens"):
+        value = getattr(args, name)
+        if value is not None:
+            overrides[name] = value
+    return IngestionConfig(**overrides)
 
 
 def _write_jsonl(result: IngestionResult, out: Path) -> None:
@@ -49,9 +53,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="Output .jsonl file (single input) "
                         "or output directory (directory input).")
     parser.add_argument("--glob", default="*.pdf", help="Glob when input is a directory.")
-    parser.add_argument("--max-tokens", type=int, default=512)
-    parser.add_argument("--overlap-tokens", type=int, default=64)
-    parser.add_argument("--min-tokens", type=int, default=64)
+    # Defaults come from IngestionConfig when the flag is omitted (None sentinel).
+    parser.add_argument("--max-tokens", type=int, default=None,
+                        help="Override IngestionConfig.max_tokens.")
+    parser.add_argument("--overlap-tokens", type=int, default=None,
+                        help="Override IngestionConfig.overlap_tokens.")
+    parser.add_argument("--min-tokens", type=int, default=None,
+                        help="Override IngestionConfig.min_tokens.")
     parser.add_argument("--detect-language", action="store_true")
     parser.add_argument("--no-tables", action="store_true", help="Disable table extraction.")
     parser.add_argument("--no-images", action="store_true", help="Disable image detection.")

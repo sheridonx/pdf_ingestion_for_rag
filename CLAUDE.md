@@ -56,12 +56,18 @@ open_document ─▶ DocumentParser.parse ─▶ HierarchicalChunker.chunk ─�
   into reading order by `(y, x)`.
 
 - **`chunker.py`** — `HierarchicalChunker` walks blocks maintaining a
-  `_HeadingStack` (the section breadcrumb, root→leaf). It accumulates a buffer
-  until the next block would exceed `max_tokens`, flushes with `overlap_tokens`
-  of carried tail text, starts a new chunk at each heading (`split_on_section`),
-  windows oversized single blocks, keeps tables whole (`keep_tables_whole`),
-  and finally merges sub-`min_tokens` chunks backward. Output is
-  `_PendingChunk` — no ids/provenance yet.
+  `_HeadingStack` (the section breadcrumb, root→leaf) and **packs toward
+  `max_tokens`**. Headings are *soft* boundaries: a chunk only breaks at a
+  heading that is major (`heading_level <= split_heading_level`) *and* once the
+  buffer already holds `min_tokens` — this is the guard against over-
+  fragmentation in table-heavy PDFs (hundreds of short/bold lines misread as
+  headings). It flushes with `overlap_tokens` of carried tail text, windows
+  oversized single blocks, keeps tables whole up to `hard_max_tokens` (the
+  embedding-request ceiling — larger tables are window-split so no chunk can be
+  rejected at embed time), and finally merges sub-`min_tokens` chunks *forward*
+  (across sections when `merge_across_sections`, falling back to the common-
+  ancestor breadcrumb). Section metadata is snapshotted at chunk start. Output
+  is `_PendingChunk` — no ids/provenance yet.
 
 - **`pipeline.py`** — owns everything needing *document-level* context:
   sha256 hashing, deterministic UUID5 ids (stable across runs via a fixed

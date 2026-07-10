@@ -41,7 +41,9 @@ Requires Python ≥ 3.10. Core deps: `pymupdf`, `pydantic`, `tiktoken`.
 ```python
 from pdf_ingestion_for_rag import ingest_pdf, IngestionConfig
 
-config = IngestionConfig(max_tokens=512, overlap_tokens=64)
+# Defaults (max_tokens=800, min_tokens=200, overlap=100) target
+# text-embedding-3-large; chunks land in a ~200-800 token band.
+config = IngestionConfig()
 result = ingest_pdf("report.pdf", config)
 
 for chunk in result.chunks:
@@ -119,10 +121,19 @@ for e in embedded:
 ## Configuration
 
 See `IngestionConfig` in `src/pdf_ingestion_for_rag/config.py`. Key knobs:
-`max_tokens`, `min_tokens`, `overlap_tokens`, `split_on_section`,
-`keep_tables_whole`, heading-detection thresholds, and robustness toggles
-(`skip_pages_on_error`, `pdf_password`). Section context is applied at embed
-time via `Chunk.to_embedding_input()`, not through config.
+
+* **Sizing** — `max_tokens` (800), `min_tokens` (200, the packing floor),
+  `overlap_tokens` (100), `hard_max_tokens` (8000, the embedding-safety ceiling).
+* **Structure** — `split_on_section`, `split_heading_level` (only headings this
+  major are chunk boundaries), `merge_across_sections`, `keep_tables_whole`.
+* **Heading detection** — `heading_size_ratio`, `heading_max_words`,
+  `max_heading_levels`.
+* **Robustness** — `skip_pages_on_error`, `pdf_password`.
+
+Headings are **soft boundaries**: a chunk only breaks at a major heading once it
+already holds `min_tokens`, so table-heavy PDFs don't fragment into one-line
+chunks. Raise `min_tokens` for coarser retrieval, lower it for sharper. Section
+context is applied at embed time via `Chunk.to_embedding_input()`, not config.
 
 ## Scope & extension points
 
