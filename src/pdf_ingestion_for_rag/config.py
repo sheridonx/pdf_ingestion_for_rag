@@ -7,6 +7,8 @@ most modern embedding models (e.g. text-embedding-3-*, bge, e5, Voyage).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -91,6 +93,30 @@ class IngestionConfig(BaseModel):
     # --- Extraction toggles -------------------------------------------------
     extract_tables: bool = Field(default=True)
     extract_images: bool = Field(default=True)
+
+    # --- Table detection ----------------------------------------------------
+    table_backend: Literal["pymupdf", "pdfplumber"] = Field(
+        default="pymupdf",
+        description="Table detection engine. 'pymupdf' needs no extra deps; "
+        "'pdfplumber' (install the '[tables]' extra) is stronger on borderless / "
+        "irregular tables and falls back to 'pymupdf' if the library is missing.",
+    )
+    table_detection_strategy: Literal["auto", "lines", "lines_strict", "text"] = Field(
+        default="auto",
+        description="How table gridlines are inferred. 'lines'/'lines_strict' rely on "
+        "ruled borders; 'text' infers columns from text alignment (borderless tables); "
+        "'auto' tries ruled lines first, then retries with the text strategy per page.",
+    )
+    table_min_rows: int = Field(
+        default=2,
+        ge=1,
+        description="Detected tables with fewer rows are discarded as false positives.",
+    )
+    table_min_cols: int = Field(
+        default=2,
+        ge=1,
+        description="Detected tables with fewer columns are discarded as false positives.",
+    )
     detect_language: bool = Field(
         default=False,
         description="Per-chunk language detection (requires the 'lang' extra).",

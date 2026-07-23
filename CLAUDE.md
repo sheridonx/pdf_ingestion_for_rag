@@ -51,9 +51,19 @@ open_document ─▶ DocumentParser.parse ─▶ HierarchicalChunker.chunk ─�
   scans every line to estimate the document's body font size (most common size
   weighted by character count) and builds a size→heading-level map. Pass 2
   emits `Block`s per page. Heading detection is purely font-driven (size ratio
-  vs. body, or bold + short line). Tables render to Markdown and their bboxes
-  suppress overlapping raw text lines (avoids duplication). Blocks are sorted
-  into reading order by `(y, x)`.
+  vs. body, or bold + short line). Table *detection* is delegated to
+  `table_extractor.py`; the parser wraps the results as `TABLE` blocks and uses
+  their bboxes to suppress overlapping raw text lines (avoids duplication).
+  Blocks are sorted into reading order by `(y, x)`.
+
+- **`table_extractor.py`** — table detection behind a backend interface, so the
+  engine swaps without touching the parser or chunker. `pymupdf` (default, no
+  extra deps) uses `find_tables`; its `auto` strategy retries with the `text`
+  strategy to catch **borderless / whitespace-delimited** tables. `pdfplumber`
+  (optional `[tables]` extra, lazy import) is a stronger backend for irregular
+  tables. Both render through `cells_to_markdown` to identical Markdown, so the
+  `Block`/chunker contract (tables are just Markdown text) is unchanged.
+  Degenerate detections are filtered via `table_min_rows`/`table_min_cols`.
 
 - **`chunker.py`** — `HierarchicalChunker` walks blocks maintaining a
   `_HeadingStack` (the section breadcrumb, root→leaf) and **packs toward

@@ -128,6 +128,9 @@ See `IngestionConfig` in `src/pdf_ingestion_for_rag/config.py`. Key knobs:
   major are chunk boundaries), `merge_across_sections`, `keep_tables_whole`.
 * **Heading detection** — `heading_size_ratio`, `heading_max_words`,
   `max_heading_levels`.
+* **Tables** — `table_backend` (`pymupdf` default, or `pdfplumber` via the
+  `[tables]` extra), `table_detection_strategy` (`auto` tries ruled lines then a
+  borderless-table text fallback), `table_min_rows` / `table_min_cols`.
 * **Robustness** — `skip_pages_on_error`, `pdf_password`.
 
 Headings are **soft boundaries**: a chunk only breaks at a major heading once it
@@ -143,6 +146,11 @@ context is applied at embed time via `Chunk.to_embedding_input()`, not config.
 * **Complex multi-column layouts** rely on PyMuPDF's reading-order sort; for
   heavy layout analysis, swap the parser for a layout model without touching the
   chunker or pipeline.
+* **Tables** are detected in `table_extractor.py` behind a backend interface.
+  Borderless / whitespace-delimited tables (common in financial & ESG
+  disclosures) are handled by the `auto` strategy's text-based fallback, or more
+  robustly by the optional `pdfplumber` backend (`pip install -e ".[tables]"`).
+  Both render to the same Markdown, so the chunker is unaffected.
 * **Semantic refinement**: run an embedding-similarity merge/split pass over the
   hierarchical chunks if a corpus needs it — the `Chunk` model is the seam.
 

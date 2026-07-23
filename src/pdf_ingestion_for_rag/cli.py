@@ -25,6 +25,8 @@ def _build_config(args: argparse.Namespace) -> IngestionConfig:
         "detect_language": args.detect_language,
         "extract_tables": not args.no_tables,
         "extract_images": not args.no_images,
+        "table_backend": args.table_backend,
+        "table_detection_strategy": args.table_strategy,
         "pdf_password": args.password,
     }
     for name in ("max_tokens", "min_tokens", "overlap_tokens"):
@@ -62,6 +64,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="Override IngestionConfig.min_tokens.")
     parser.add_argument("--detect-language", action="store_true")
     parser.add_argument("--no-tables", action="store_true", help="Disable table extraction.")
+    parser.add_argument("--table-backend", choices=["pymupdf", "pdfplumber"], default="pymupdf",
+                        help="Table detection engine ('pdfplumber' needs the '[tables]' extra).")
+    parser.add_argument("--table-strategy",
+                        choices=["auto", "lines", "lines_strict", "text"], default="auto",
+                        help="Table gridline strategy; 'auto' adds a borderless-table fallback.")
     parser.add_argument("--no-images", action="store_true", help="Disable image detection.")
     parser.add_argument("--password", default=None, help="Password for encrypted PDFs.")
     parser.add_argument("-v", "--verbose", action="store_true")

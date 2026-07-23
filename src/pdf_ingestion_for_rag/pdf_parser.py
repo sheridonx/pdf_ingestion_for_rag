@@ -23,6 +23,7 @@ import fitz  # PyMuPDF
 
 from .config import IngestionConfig
 from .models import Block, BlockType
+from .table_extractor import TableExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -84,18 +85,28 @@ class DocumentParser:
         body_size = self._estimate_body_font_size(page_lines)
         heading_levels = self._build_heading_level_map(page_lines, body_size)
 
-        # Second pass: build blocks per page in reading order.
+        # Second pass: build blocks per page in reading order. The table
+        # extractor holds any per-document backend state (e.g. an open
+        # pdfplumber handle) for the duration of the pass.
         blocks: list[Block] = []
-        for page_index, page in enumerate(doc):
-            try:
-                blocks.extend(
-                    self._blocks_for_page(page, page_lines[page_index], heading_levels)
-                )
-            except Exception as exc:
-                if self.config.skip_pages_on_error:
-                    logger.warning("Skipping page %d during block build: %s", page_index + 1, exc)
-                else:
-                    raise PDFParseError(f"Failed to parse page {page_index + 1}: {exc}") from exc
+        with TableExtractor(self.config) as tables:
+            tables.open(doc)
+            for page_index, page in enumerate(doc):
+                try:
+                    blocks.extend(
+                        self._blocks_for_page(
+                            page, page_lines[page_index], heading_levels, tables
+                        )
+                    )
+                except Exception as exc:
+                    if self.config.skip_pages_on_error:
+                        logger.warning(
+                            "Skipping page %d during block build: %s", page_index + 1, exc
+                        )
+                    else:
+                        raise PDFParseError(
+                            f"Failed to parse page {page_index + 1}: {exc}"
+                        ) from exc
         return blocks
 
     # -- line extraction ----------------------------------------------------
@@ -169,11 +180,15 @@ class DocumentParser:
     # -- per-page block assembly -------------------------------------------
 
     def _blocks_for_page(
-        self, page: fitz.Page, lines: list[dict], heading_levels: dict[float, int]
+        self,
+        page: fitz.Page,
+        lines: list[dict],
+        heading_levels: dict[float, int],
+        tables: TableExtractor,
     ) -> list[Block]:
         page_number = page.number + 1
 
-        table_bboxes, table_blocks = self._extract_tables(page)
+        table_bboxes, table_blocks = self._extract_tables(page, tables)
         image_blocks = self._extract_images(page)
 
         # Drop text lines that fall inside a detected table (avoid duplication).
@@ -212,31 +227,24 @@ class DocumentParser:
             weighted[ln["size"]] += len(ln["text"])
         return weighted.most_common(1)[0][0] if weighted else 0.0
 
-    def _extract_tables(self, page: fitz.Page) -> tuple[list[tuple], list[Block]]:
-        if not self.config.extract_tables:
-            return [], []
+    def _extract_tables(
+        self, page: fitz.Page, tables: TableExtractor
+    ) -> tuple[list[tuple], list[Block]]:
+        """Detect tables via the configured backend and wrap them as Blocks.
+
+        Returns the table bboxes (so overlapping raw text lines can be dropped)
+        alongside the `Block`s themselves.
+        """
         bboxes: list[tuple] = []
         blocks: list[Block] = []
-        try:
-            finder = page.find_tables()
-        except Exception as exc:  # table finder can be finicky on odd PDFs
-            logger.debug("find_tables failed on page %d: %s", page.number + 1, exc)
-            return [], []
-        for table in getattr(finder, "tables", []):
-            try:
-                markdown = table.to_markdown()
-            except Exception:
-                markdown = ""
-            if not markdown.strip():
-                continue
-            bbox = tuple(round(float(v), 2) for v in table.bbox)
-            bboxes.append(bbox)
+        for table in tables.extract(page):
+            bboxes.append(table.bbox)
             blocks.append(
                 Block(
                     type=BlockType.TABLE,
-                    text=markdown.strip(),
+                    text=table.markdown.strip(),
                     page_number=page.number + 1,
-                    bbox=bbox,
+                    bbox=table.bbox,
                 )
             )
         return bboxes, blocks
