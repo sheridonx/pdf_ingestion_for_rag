@@ -94,10 +94,35 @@ class IngestionConfig(BaseModel):
     extract_tables: bool = Field(default=True)
     extract_images: bool = Field(default=True)
 
-    # --- Table detection ----------------------------------------------------
+    # --- Parser backend -----------------------------------------------------
+    parser_backend: Literal["pymupdf4llm", "pymupdf"] = Field(
+        default="pymupdf4llm",
+        description="Layout parser. 'pymupdf4llm' (default) is a layout-model "
+        "parser that resolves multi-column pages natively and labels block "
+        "classes (headings/tables/headers); 'pymupdf' is the legacy font-heuristic "
+        "parser with the pluggable table backend below. The 'pymupdf' parser is "
+        "used automatically if pymupdf4llm cannot be imported.",
+    )
+    layout_engine: Literal["auto", "ml", "heuristic"] = Field(
+        default="auto",
+        description="Engine for the 'pymupdf4llm' parser. 'ml' uses the "
+        "'pymupdf-layout' ONNX model for column/block detection; 'heuristic' uses "
+        "pymupdf4llm's geometry-only column detection (no extra model); 'auto' "
+        "prefers 'ml' when 'pymupdf-layout' is installed, else 'heuristic'.",
+    )
+    drop_running_headers: bool = Field(
+        default=True,
+        description="Drop page-header/page-footer regions (running headers, page "
+        "numbers) detected by the layout model. Only applies to the 'pymupdf4llm' "
+        "parser with the 'ml' engine.",
+    )
+
+    # --- Table detection (legacy 'pymupdf' parser only) ---------------------
     table_backend: Literal["pymupdf", "pdfplumber"] = Field(
         default="pymupdf",
-        description="Table detection engine. 'pymupdf' needs no extra deps; "
+        description="Table detection engine for the legacy 'pymupdf' parser "
+        "(ignored by 'pymupdf4llm', which finds tables via its layout pass). "
+        "'pymupdf' needs no extra deps; "
         "'pdfplumber' (install the '[tables]' extra) is stronger on borderless / "
         "irregular tables and falls back to 'pymupdf' if the library is missing.",
     )

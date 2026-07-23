@@ -14,6 +14,7 @@ mid-table). See `README.md` for the rationale vs. semantic chunking.
 ```bash
 # Install (editable, with dev + optional extras)
 pip install -e ".[dev,lang]"      # add ,azure for the embedding backend
+pip install -e ".[dev,layout]"    # [layout] = pymupdf-layout ONNX model for the 'ml' engine
 
 # Tests — chunker/tokenizer tests run without any PDF or PyMuPDF
 pytest
@@ -36,10 +37,16 @@ The pipeline is a strict one-way flow; each stage has a single owner module.
 Read them in this order to understand the whole:
 
 ```
-open_document ─▶ DocumentParser.parse ─▶ HierarchicalChunker.chunk ─▶ _finalize
- (pdf_parser)      (pdf_parser)              (chunker)                  (pipeline)
-   fitz.Document      list[Block]           list[_PendingChunk]        list[Chunk]
+open_document ─▶ <parser>.parse ─────────▶ HierarchicalChunker.chunk ─▶ _finalize
+ (pdf_parser)      (layout_parser |          (chunker)                  (pipeline)
+   fitz.Document    pdf_parser)              list[_PendingChunk]        list[Chunk]
+                    list[Block]
 ```
+
+The parser is **pluggable** behind a shared `parse(doc) -> list[Block]` contract
+(`pipeline._build_parser` picks one from `config.parser_backend`):
+`LayoutParser` (default `pymupdf4llm`) or the legacy `DocumentParser`
+(`pymupdf`). Everything downstream of `Block` is identical either way.
 
 - **`models.py`** — the two-tier data model that everything hinges on.
   `Block` is the *internal* layout unit (text/heading/table/image, with bbox,
@@ -47,7 +54,21 @@ open_document ─▶ DocumentParser.parse ─▶ HierarchicalChunker.chunk ─�
   retrieval output. The boundary between them is the key design seam: parsing
   produces `Block`s, chunking consumes them, and only `Chunk` is exported.
 
-- **`pdf_parser.py`** — `DocumentParser` does a **two-pass** parse. Pass 1
+- **`layout_parser.py`** — `LayoutParser` (**default** backend) wraps
+  **PyMuPDF4LLM**, which resolves **multi-column** pages natively (via the
+  `pymupdf-layout` ONNX model, or its own `column_boxes` geometry pass) — the
+  gap the font-heuristic parser can't close, since sorting blocks by `(y, x)`
+  interleaves columns line-by-line. Two engines via `config.layout_engine`:
+  `ml` slices each page's Markdown by the layout model's `page_boxes`
+  (`class` + `pos` char-span → `Block`), dropping running headers/footers and
+  finding tables without a separate pass; `heuristic` re-parses page Markdown by
+  syntax (`#`/`|`/`-`) when the model isn't installed. Raw Markdown `#`-levels
+  are **rank-normalised** per document into `1..max_heading_levels` (same intent
+  as `DocumentParser`'s size→level map) so the chunker's breadcrumb stays sane.
+  Falls back to `DocumentParser` if `pymupdf4llm` can't be imported.
+
+- **`pdf_parser.py`** — `DocumentParser` (legacy `pymupdf` backend) does a
+  **two-pass** parse. Pass 1
   scans every line to estimate the document's body font size (most common size
   weighted by character count) and builds a size→heading-level map. Pass 2
   emits `Block`s per page. Heading detection is purely font-driven (size ratio

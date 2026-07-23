@@ -16,11 +16,31 @@ from pathlib import Path
 
 from .chunker import HierarchicalChunker, _PendingChunk
 from .config import IngestionConfig
+from .layout_parser import LayoutParser, layout_parser_available
 from .models import Chunk, ChunkMetadata
 from .pdf_parser import DocumentParser, PDFParseError, open_document
 from .tokenizer import Tokenizer
 
 logger = logging.getLogger(__name__)
+
+
+def _build_parser(config: IngestionConfig) -> DocumentParser | LayoutParser:
+    """Select the parser backend, degrading gracefully if pymupdf4llm is absent.
+
+    The default 'pymupdf4llm' backend needs the optional ``[layout]`` extra; if
+    it is not importable we fall back to the legacy font-heuristic parser rather
+    than failing ingestion (mirrors the pipeline's degrade-don't-crash posture).
+    """
+    if config.parser_backend == "pymupdf4llm":
+        ok, reason = layout_parser_available()
+        if ok:
+            return LayoutParser(config)
+        logger.warning(
+            "parser_backend='pymupdf4llm' unavailable (%s); using the legacy "
+            "'pymupdf' parser. Install the '[layout]' extra.",
+            reason,
+        )
+    return DocumentParser(config)
 
 # Stable namespace so chunk ids are reproducible across runs/machines.
 _NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
@@ -115,7 +135,7 @@ def _ingest(
     config: IngestionConfig,
 ) -> IngestionResult:
     tokenizer = Tokenizer(config.tokenizer_encoding)
-    parser = DocumentParser(config)
+    parser = _build_parser(config)
     chunker = HierarchicalChunker(config, tokenizer)
 
     doc = open_document(source, config)

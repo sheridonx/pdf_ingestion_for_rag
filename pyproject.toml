@@ -8,14 +8,16 @@ version = "0.1.0"
 description = "Production-grade PDF ingestion for RAG: layout-aware parsing + hierarchical chunking with rich metadata."
 requires-python = ">=3.10"
 dependencies = [
-    "pymupdf>=1.24.0",   # PDF parsing, layout, tables, images
-    "pydantic>=2.6",     # typed, validated chunk models
-    "tiktoken>=0.6",     # token counting / token-aware splitting
+    "pymupdf>=1.24.0",     # PDF parsing, layout, tables, images
+    "pymupdf4llm>=0.0.17", # layout-aware, multi-column-native Markdown parser (default backend)
+    "pydantic>=2.6",       # typed, validated chunk models
+    "tiktoken>=0.6",       # token counting / token-aware splitting
 ]
 
 [project.optional-dependencies]
 lang = ["langdetect>=1.0.9"]        # optional per-chunk language detection
-tables = ["pdfplumber>=0.11"]       # stronger borderless-table detection backend
+layout = ["pymupdf-layout"]         # ONNX layout model for the 'ml' engine (column/block detection)
+tables = ["pdfplumber>=0.11"]       # stronger borderless-table detection backend (legacy 'pymupdf' parser)
 azure = ["openai>=1.13", "tenacity>=8.2"]  # Azure OpenAI embedding backend
 dev = ["pytest>=8.0", "ruff>=0.4"]
 notebook = [                        # run notebooks/pipeline_demo.ipynb

@@ -1,7 +1,8 @@
 # pdf-ingestion-for-rag
 
-Production-grade PDF → chunk ingestion for RAG. Layout-aware parsing (PyMuPDF)
-+ **hierarchical, structure-aware chunking** with rich, typed metadata.
+Production-grade PDF → chunk ingestion for RAG. Layout-aware parsing
+(**PyMuPDF4LLM**, with multi-column support) + **hierarchical, structure-aware
+chunking** with rich, typed metadata.
 
 ## Why hierarchical (not semantic) chunking?
 
@@ -29,9 +30,13 @@ cd pdf_ingestion_for_rag
 python -m venv .venv && .venv\Scripts\activate     # Windows
 # source .venv/bin/activate                        # macOS/Linux
 pip install -e ".[dev,lang]"
+# For the best multi-column detection, add the ONNX layout model:
+pip install -e ".[dev,lang,layout]"
 ```
 
-Requires Python ≥ 3.10. Core deps: `pymupdf`, `pydantic`, `tiktoken`.
+Requires Python ≥ 3.10. Core deps: `pymupdf`, `pymupdf4llm`, `pydantic`,
+`tiktoken`. The `[layout]` extra adds `pymupdf-layout` (the ONNX layout model);
+without it the parser still resolves columns with a geometry-only heuristic.
 
 > Note: this machine has no Python interpreter installed, so the test suite has
 > not been run here. After installing, run `pytest` to validate.
@@ -143,14 +148,20 @@ context is applied at embed time via `Chunk.to_embedding_input()`, not config.
 * **Scanned / image-only PDFs** produce no text (a warning is emitted). Add an
   OCR step (e.g. `ocrmypdf`, Tesseract, or a vision model) upstream, then feed
   the OCR'd PDF/bytes to `ingest_pdf`.
-* **Complex multi-column layouts** rely on PyMuPDF's reading-order sort; for
-  heavy layout analysis, swap the parser for a layout model without touching the
-  chunker or pipeline.
-* **Tables** are detected in `table_extractor.py` behind a backend interface.
-  Borderless / whitespace-delimited tables (common in financial & ESG
+* **Parser backend** is pluggable via `config.parser_backend`. The default
+  `pymupdf4llm` (`layout_parser.py`) resolves **multi-column** pages natively and
+  labels block classes (headings / tables / running headers) with a layout
+  model; `config.layout_engine` chooses the ONNX model (`ml`, needs the
+  `[layout]` extra) or a geometry-only heuristic. The legacy `pymupdf`
+  (`pdf_parser.py`) font-heuristic parser remains available and is used
+  automatically if `pymupdf4llm` can't be imported. Both emit the same `Block`
+  stream, so the chunker and pipeline are untouched either way.
+* **Tables** — the `pymupdf4llm` parser finds tables in its layout pass. The
+  legacy `pymupdf` parser detects them in `table_extractor.py` behind a backend
+  interface: borderless / whitespace-delimited tables (common in financial & ESG
   disclosures) are handled by the `auto` strategy's text-based fallback, or more
   robustly by the optional `pdfplumber` backend (`pip install -e ".[tables]"`).
-  Both render to the same Markdown, so the chunker is unaffected.
+  All paths render to the same Markdown, so the chunker is unaffected.
 * **Semantic refinement**: run an embedding-similarity merge/split pass over the
   hierarchical chunks if a corpus needs it — the `Chunk` model is the seam.
 
